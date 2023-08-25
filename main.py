@@ -1,6 +1,7 @@
 import streamlit as st
+import pandas as pd
 
-# Define the updated Charlson Comorbidity conditions and their respective weights
+# Define the Charlson Comorbidity conditions and their respective weights
 COMORBIDITIES = {
     "Myocardial infarction": 1,
     "Congestive heart failure": 1,
@@ -23,38 +24,28 @@ COMORBIDITIES = {
     "AIDS": 6
 }
 
-def calculate_cci(selected_conditions, age):
-    """Calculate the CCI score based on selected comorbidities and age."""
-    score = 0
+def calculate_cci_for_patient(row):
+    """Calculate CCI for a single row from the dataframe."""
+    score = sum(row[condition] * COMORBIDITIES[condition] for condition in COMORBIDITIES.keys())
 
-    # Handle mutual exclusivity of liver disease
-    if "Mild liver disease" in selected_conditions and "Moderate to severe liver disease" in selected_conditions:
-        st.error("You cannot select both 'Mild liver disease' and 'Moderate or severe liver disease'.")
-        return
-
-    for condition in selected_conditions:
-        score += COMORBIDITIES[condition]
-    
-    # Add age factor starting from age 40
-    if age >= 40:
-        score += (age - 30) // 10
-        if score > 4:  # Ensure maximum of 4 points for age
+    if row["age"] >= 40:
+        score += (row["age"] - 30) // 10
+        if score > 4:
             score -= (score - 4)
-        
+
     return score
 
-st.title("Charlson Comorbidity Index Calculator")
+st.title("Batch Charlson Comorbidity Index Calculator")
 
-# Input age
-age = st.number_input("Enter the patient's age:", min_value=0, max_value=120, value=40, step=1)
+uploaded_file = st.file_uploader("Upload a CSV file with patient data:", type=["csv"])
 
-# Allow users to select multiple comorbidities
-selected_conditions = st.multiselect(
-    "Select the comorbidities:", list(COMORBIDITIES.keys())
-)
-
-# Calculate CCI when user clicks the button
-if st.button("Calculate CCI"):
-    cci_score = calculate_cci(selected_conditions, age)
-    if cci_score is not None:  # Ensure score is not None due to liver disease error
-        st.write(f"Charlson Comorbidity Index is: {cci_score}")
+if uploaded_file:
+    data = pd.read_csv(uploaded_file)
+    
+    # Check if the required columns are in the uploaded file
+    required_columns = set(['patient_id', 'age'] + list(COMORBIDITIES.keys()))
+    if not required_columns.issubset(data.columns):
+        st.error("Some required columns are missing in the uploaded file. Please verify the file format.")
+    else:
+        data['CCI'] = data.apply(calculate_cci_for_patient, axis=1)
+        st.write(data[['patient_id', 'age', 'CCI']])
